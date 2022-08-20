@@ -91,6 +91,9 @@ for idx = 1:length(tout)
     % Compute Acceleration in NED frame
     a_NED(1:3,idx) = C_e_n*a_ECEF(:,idx);
     
+    %%% Compute Acceleration w.r.t ECEF in body frame
+    a_Body(1:3,idx) = T_nedB.' * (a_NED(1:3,idx)-[0;0;0]);
+    
     % Compute angular velocity of body w.r.t NED resolved in NED
     % ECI inertial components of angular velocity
     ptp = Quat2Eu(stateout(idx,7:10)');
@@ -102,6 +105,9 @@ for idx = 1:length(tout)
     % Compute NED components of angular velocity
     omega_NAV(1:3,idx) = omega_NED(C_ni, omega_ECI(1:3,idx),omega_en);
     
+    %%% Compute Acceleration w.r.t ECEF in body frame
+    omega_Body(1:3,idx) = T_nedB.' * omega_NAV(1:3,idx);
+    
     % Compute UVW
     T_mat = TIBquat(stateout(idx,7:10)').'; % Transponse as we need UVW
     UVW(1:3,idx) = T_mat * stateout(idx,4:6)';
@@ -112,8 +118,13 @@ for idx = 1:length(tout)
            -stateout(idx,12),stateout(idx,11),0];
     UVWdot(1:3,idx) = - pqr_mat*UVW(1:3,idx);
     
+    % Orientation matrix Body to NED
+    orientationNB(:,:,idx) = T_nedB.';    
+    
 end
-[~,orientationNED,~,accNED,angVelNED] = traj(UVWdot.',stateout(:,11:13));
+%[~,orientationNED,~,accNED,angVelNED] = traj(a_Body',[omega_Body(3,:)',omega_Body(2,:)',omega_Body(1,:)']);
+[~,orientationNED,~,accNED,angVelNED] = traj(a_Body',omega_Body');
+[accelReading,gyroReading,magReading] = IMU(a_NED.',omega_NAV.',orientationNB);
 
 %%%Convert state to kilometers
 stateoutOrbit(:,1:6) = stateout(:,1:6)/1000;
@@ -170,21 +181,21 @@ grid on
 xlabel('Time (sec)')
 ylabel('Angular Velocity (rad/s)')
 legend('p','q','r')
-%}
+
 
 %%%Angular velocity in ECI inertial and NAV NED
 figure
 subplot(2,1,1)
-plot(tout,omega_ECI,'-','LineWidth',2);
+plot(tout,angVelNED,'-','LineWidth',2);
 grid on
 xlabel('Time (sec)')
-ylabel('Angular Velocity ECI')
+ylabel('Angular Velocity FUNC')
 subplot(2,1,2)
 plot(tout,omega_NAV,'-','LineWidth',2);
 grid on
 xlabel('Time (sec)')
-ylabel('Angular Velocity NAV')
-%{
+ylabel('Angular Velocity OURS')
+
 %%%plot the magnetic field
 fig5=figure();
 set(fig5,'color','white');
@@ -285,14 +296,14 @@ xlabel('Time (sec)')
 ylabel('Acc ECEF')
 legend('x','y','z')
 %xlim([0,2000])
-%}
+
 %%%plot linear acceleration NED frame
 fig11=figure();
 set(fig11,'color','white');
 plot(tout,a_NED,'-','LineWidth',2)
 grid on
 xlabel('Time (sec)')
-ylabel('Acc NED')
+ylabel('Acc OURS')
 legend('x','y','z')
 %xlim([0,2000])
 %%%plot linear acceleration NED frame
@@ -301,11 +312,11 @@ set(fig11,'color','white');
 plot(tout,accNED,'-','LineWidth',2)
 grid on
 xlabel('Time (sec)')
-ylabel('Acc NED')
+ylabel('Acc FUNCTION')
 legend('x','y','z')
 %xlim([0,2000])
 
-%{
+
 %%%plot Velocity BODY frame
 fig12=figure();
 set(fig12,'color','white');
@@ -325,3 +336,62 @@ ylabel('Acc Body')
 legend('x','y','z')
 %xlim([0,2000])
 %}
+figure
+subplot(3,1,1)
+plot(tout,accelReading)
+legend('X-axis','Y-axis','Z-axis')
+ylabel('Acceleration (m/s^2)')
+title('Accelerometer Readings')
+
+subplot(3,1,2)
+plot(tout,gyroReading)
+legend('X-axis','Y-axis','Z-axis')
+title('Gyroscope Readings')
+ylabel('Angular Velocity (rad/s)')
+
+subplot(3,1,3)
+plot(tout,magReading)
+legend('X-axis','Y-axis','Z-axis')
+ylabel('Magnetic Field (\muT)')
+xlabel('Time (s)')
+title('Magnetometer Readings')
+
+figure
+subplot(2,1,1)
+plot(tout,accelReading)
+legend('X-axis','Y-axis','Z-axis')
+ylabel('Acceleration (m/s^2)')
+title('Acc Readings IMU')
+
+subplot(2,1,2)
+plot(tout,a_Body)
+legend('X-axis','Y-axis','Z-axis')
+ylabel('Acceleration (m/s^2)')
+title('Acc Readings MODEL')
+
+figure
+subplot(2,1,1)
+plot(tout,gyroReading)
+legend('X-axis','Y-axis','Z-axis')
+title('Gyro Readings IMU')
+ylabel('Angular Velocity (rad/s)')
+
+subplot(2,1,2)
+plot(tout,omega_Body)
+legend('X-axis','Y-axis','Z-axis')
+title('Gyro Readings MODEL')
+ylabel('Angular Velocity (rad/s)')
+
+figure
+subplot(2,1,1)
+plot(tout,magReading)
+legend('X-axis','Y-axis','Z-axis')
+ylabel('Mag Field (\muT)')
+xlabel('Time (s)')
+title('Mag Readings IMU')
+subplot(2,1,2)
+plot(tout,[BxBout;ByBout;BzBout]/1000)
+legend('X-axis','Y-axis','Z-axis')
+ylabel('Mag Field (\muT)')
+xlabel('Time (s)')
+title('Mag Readings MODEL')
